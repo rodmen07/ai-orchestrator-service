@@ -69,3 +69,37 @@ cd /home/rodmendoza07/Projects/backend-service
 fly secrets set AI_ORCHESTRATOR_PLAN_URL=https://ai-orchestrator-service-rodmen07.fly.dev/plan
 fly deploy
 ```
+
+## Working context from current code
+
+### Request/response validation
+
+- `PlanRequest.goal` is validated with Pydantic (`min_length=3`, `max_length=1000`).
+- `POST /plan` returns `PlanResponse` with `tasks: List[str]`.
+- `GET /health` returns `{"status":"ok"}` via typed response model.
+
+### LLM integration behavior
+
+- Service calls OpenRouter `POST /chat/completions` using `httpx.AsyncClient`.
+- Prompt requires JSON output shape: `{"tasks":["Task 1", "Task 2"]}`.
+- Default generation config currently uses `temperature: 0.2`.
+
+### Output parsing and normalization
+
+- Parser accepts multiple output formats from upstream model:
+  - raw JSON,
+  - JSON wrapped in fenced code blocks,
+  - plain line-by-line fallback.
+- Task normalization removes leading numbering/bullets and trims whitespace.
+- Empty tasks are filtered out before returning response.
+
+### Failure semantics
+
+- Missing `OPENROUTER_API_KEY` returns HTTP `503`.
+- Upstream HTTP failures or malformed payloads return HTTP `502`.
+- If no actionable tasks are extracted, service returns HTTP `502` with clear detail.
+
+### Contributor notes
+
+- Current test coverage includes normalization behavior (`tests/test_normalization.py`).
+- If parsing or normalization logic changes, extend tests in that file first.

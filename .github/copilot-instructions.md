@@ -65,3 +65,29 @@ When changing env vars, planner behavior, or API fields:
 - update README.md,
 - verify backend-service compatibility notes,
 - include migration guidance when behavior changes materially.
+
+## 10) Current code map (authoritative)
+
+- Service entrypoint and routes: `app/main.py`
+- Normalization/parsing helpers: `normalize_task`, `normalize_tasks`, `extract_json_payload`, `extract_tasks_from_content`
+- Planner execution: `generate_plan`
+- Current normalization tests: `tests/test_normalization.py`
+
+## 11) Planner behavior constraints
+
+- Keep request validation bounds (`goal` min/max length) unless all callers are coordinated.
+- Maintain multi-shape extraction logic (fenced JSON, plain JSON, line fallback) for robustness.
+- Preserve normalization of numbered/bulleted outputs before returning task arrays.
+- Keep planner output non-empty guarantee; empty extraction should remain a failure.
+
+## 12) Error handling constraints
+
+- Missing provider key should continue returning `503` (configuration issue).
+- Upstream/model response failures should remain `502` class errors.
+- Keep error messages stable enough for backend and frontend user-message mapping.
+
+## 13) Performance and reliability notes
+
+- Respect `REQUEST_TIMEOUT_SECONDS` in all provider requests.
+- Avoid adding synchronous network calls; keep async I/O path with `httpx.AsyncClient`.
+- If retry logic is introduced, keep bounded retries and deterministic timeout ceilings.
