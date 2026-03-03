@@ -1,0 +1,67 @@
+# AI Orchestrator Service Instructions (Detailed)
+
+Use this file as the repository-specific implementation contract for AI-assisted changes.
+
+## 1) Repository role
+
+- This service converts high-level goals into actionable task lists.
+- Stack: Python microservice (FastAPI/Uvicorn runtime from repo README).
+- This is the only place where AI provider-specific logic should live.
+
+## 2) Service boundaries
+
+- Keep backend-service decoupled from provider APIs and keys.
+- Keep frontend-service unaware of provider details.
+- Expose stable, simple planning contract over HTTP.
+
+## 3) API contract (must remain stable)
+
+- GET /health
+  - Response: { "status": "ok" }
+- POST /plan
+  - Request: { "goal": string }
+  - Response: { "tasks": string[] }
+
+Contract changes must be additive unless explicitly requested and coordinated across backend/frontend.
+
+## 4) Environment and defaults
+
+- APP_PORT default: 8081.
+- OPENROUTER_API_KEY: required for provider calls.
+- OPENROUTER_MODEL default: google/gemma-3-4b-it:free.
+- OPENROUTER_BASE_URL default: https://openrouter.ai/api/v1.
+- REQUEST_TIMEOUT_SECONDS default: 30.
+
+## 5) Integration compatibility requirements
+
+- backend-service defaults to planner URL http://127.0.0.1:8081/plan.
+- Preserve request/response field names and JSON shapes expected by backend.
+- Use deterministic response formatting that backend can pass through safely.
+
+## 6) Reliability and failure behavior
+
+- Enforce request timeouts and return clear, bounded failures.
+- Avoid leaking provider internals in user-facing error messages.
+- Keep health endpoint lightweight and independent from provider uptime where possible.
+- Ensure failure paths are test-covered for provider/network timeout cases.
+
+## 7) Implementation guidance
+
+- Isolate provider adapters from request/response transport logic.
+- Keep prompt/planning internals configurable via env vars where practical.
+- Prefer explicit schemas and strict validation over permissive parsing.
+- Avoid introducing hidden state that causes non-repeatable outputs.
+
+## 8) Quality gates before completion
+
+Run and pass:
+- pytest
+
+If formatting/lint tools are present in repo config, run them as well before finalizing changes.
+
+## 9) Documentation synchronization
+
+When changing env vars, planner behavior, or API fields:
+- update README.md,
+- verify backend-service compatibility notes,
+- include migration guidance when behavior changes materially.
