@@ -5,7 +5,7 @@ def build_plan_prompt(goal: str) -> str:
     return (
         "You are a planning assistant. Return JSON only with shape "
         '{"tasks":["Task 1","Task 2"]}. '
-        "Generate 4 to 8 actionable tasks for this goal: "
+        "Generate 4 to 8 actionable tasks for this short-term goal: "
         f"{goal}"
     )
 
