@@ -31,6 +31,9 @@ Contract changes must be additive unless explicitly requested and coordinated ac
 - OPENROUTER_MODEL default: google/gemma-3-4b-it:free.
 - OPENROUTER_BASE_URL default: https://openrouter.ai/api/v1.
 - REQUEST_TIMEOUT_SECONDS default: 30.
+- OPENROUTER_MAX_RETRIES default: 2.
+- OPENROUTER_RETRY_BASE_DELAY_SECONDS default: 0.4.
+- LOG_LEVEL default: INFO.
 
 ## 5) Integration compatibility requirements
 
@@ -91,3 +94,5 @@ When changing env vars, planner behavior, or API fields:
 - Respect `REQUEST_TIMEOUT_SECONDS` in all provider requests.
 - Avoid adding synchronous network calls; keep async I/O path with `httpx.AsyncClient`.
 - If retry logic is introduced, keep bounded retries and deterministic timeout ceilings.
+- Keep retry behavior bounded and only for transient network/upstream status failures.
+- Preserve structured log fields around planning duration/attempts for production troubleshooting.

@@ -49,6 +49,9 @@ This keeps one canonical planner implementation while frontend and backend APIs 
 - `OPENROUTER_MODEL` (default: `google/gemma-3-4b-it:free`)
 - `OPENROUTER_BASE_URL` (default: `https://openrouter.ai/api/v1`)
 - `REQUEST_TIMEOUT_SECONDS` (default: `30`)
+- `OPENROUTER_MAX_RETRIES` (default: `2`)
+- `OPENROUTER_RETRY_BASE_DELAY_SECONDS` (default: `0.4`)
+- `LOG_LEVEL` (default: `INFO`)
 - `APP_PORT` (default: `8081`)
 
 ## Deploy (Fly.io)
@@ -83,6 +86,7 @@ fly deploy
 - Service calls OpenRouter `POST /chat/completions` using `httpx.AsyncClient`.
 - Prompt requires JSON output shape: `{"tasks":["Task 1", "Task 2"]}`.
 - Default generation config currently uses `temperature: 0.2`.
+- For transient upstream failures (for example `429`/`5xx`), service performs bounded retry/backoff.
 
 ### Output parsing and normalization
 
@@ -98,6 +102,11 @@ fly deploy
 - Missing `OPENROUTER_API_KEY` returns HTTP `503`.
 - Upstream HTTP failures or malformed payloads return HTTP `502`.
 - If no actionable tasks are extracted, service returns HTTP `502` with clear detail.
+
+### Observability notes
+
+- Service logs planner attempt count, model, duration, and task count per successful plan generation.
+- `LOG_LEVEL` can be raised in production for deeper troubleshooting.
 
 ### Contributor notes
 

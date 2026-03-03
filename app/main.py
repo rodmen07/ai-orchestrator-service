@@ -1,6 +1,10 @@
+import asyncio
 import json
+import logging
+import math
 import os
 import re
+import time
 from typing import List
 
 import httpx
@@ -24,7 +28,51 @@ APP_TITLE = "ai-orchestrator-service"
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "google/gemma-3-4b-it:free")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-REQUEST_TIMEOUT_SECONDS = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "30"))
+
+
+def get_positive_float_env(name: str, default: float) -> float:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+
+    try:
+        parsed = float(raw_value)
+    except ValueError:
+        return default
+
+    if not math.isfinite(parsed) or parsed <= 0:
+        return default
+
+    return parsed
+
+
+def get_non_negative_int_env(name: str, default: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        return default
+
+    if parsed < 0:
+        return default
+
+    return parsed
+
+
+REQUEST_TIMEOUT_SECONDS = get_positive_float_env("REQUEST_TIMEOUT_SECONDS", 30.0)
+OPENROUTER_MAX_RETRIES = get_non_negative_int_env("OPENROUTER_MAX_RETRIES", 2)
+OPENROUTER_RETRY_BASE_DELAY_SECONDS = get_positive_float_env(
+    "OPENROUTER_RETRY_BASE_DELAY_SECONDS",
+    0.4,
+)
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+RETRYABLE_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
+
+logging.basicConfig(level=LOG_LEVEL)
+logger = logging.getLogger(APP_TITLE)
 
 app = FastAPI(title=APP_TITLE)
 
@@ -83,6 +131,64 @@ def extract_tasks_from_content(content: str) -> List[str]:
     return normalize_tasks(lines)
 
 
+def should_retry_status(status_code: int) -> bool:
+    return status_code in RETRYABLE_STATUS_CODES
+
+
+async def post_chat_completion_with_retry(
+    *,
+    client: httpx.AsyncClient,
+    endpoint: str,
+    headers: dict[str, str],
+    body: dict,
+) -> tuple[httpx.Response, int]:
+    attempts = OPENROUTER_MAX_RETRIES + 1
+    last_network_error: httpx.RequestError | None = None
+
+    for attempt_index in range(attempts):
+        attempt_number = attempt_index + 1
+        try:
+            response = await client.post(endpoint, headers=headers, json=body)
+        except httpx.RequestError as error:
+            last_network_error = error
+
+            if attempt_number >= attempts:
+                break
+
+            delay_seconds = OPENROUTER_RETRY_BASE_DELAY_SECONDS * attempt_number
+            logger.warning(
+                "openrouter network error attempt %s/%s (%s); retrying in %.2fs",
+                attempt_number,
+                attempts,
+                error.__class__.__name__,
+                delay_seconds,
+            )
+            await asyncio.sleep(delay_seconds)
+            continue
+
+        if response.status_code < 400:
+            return response, attempt_number
+
+        if should_retry_status(response.status_code) and attempt_number < attempts:
+            delay_seconds = OPENROUTER_RETRY_BASE_DELAY_SECONDS * attempt_number
+            logger.warning(
+                "openrouter retryable status %s attempt %s/%s; retrying in %.2fs",
+                response.status_code,
+                attempt_number,
+                attempts,
+                delay_seconds,
+            )
+            await asyncio.sleep(delay_seconds)
+            continue
+
+        return response, attempt_number
+
+    if last_network_error is not None:
+        raise HTTPException(status_code=502, detail="Upstream LLM request failed")
+
+    raise HTTPException(status_code=502, detail="Upstream LLM request failed")
+
+
 async def generate_plan(goal: str) -> List[str]:
     if not OPENROUTER_API_KEY:
         raise HTTPException(status_code=503, detail="OPENROUTER_API_KEY missing")
@@ -105,11 +211,15 @@ async def generate_plan(goal: str) -> List[str]:
         "Content-Type": "application/json",
     }
 
+    started_at = time.monotonic()
+    endpoint = f"{OPENROUTER_BASE_URL}/chat/completions"
+
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
-        response = await client.post(
-            f"{OPENROUTER_BASE_URL}/chat/completions",
+        response, attempts_used = await post_chat_completion_with_retry(
+            client=client,
+            endpoint=endpoint,
             headers=headers,
-            json=body,
+            body=body,
         )
 
     if response.status_code >= 400:
@@ -124,6 +234,14 @@ async def generate_plan(goal: str) -> List[str]:
     tasks = extract_tasks_from_content(content)
     if not tasks:
         raise HTTPException(status_code=502, detail="No tasks returned by LLM")
+
+    logger.info(
+        "plan generated model=%s attempts=%s duration_ms=%.2f tasks=%s",
+        OPENROUTER_MODEL,
+        attempts_used,
+        (time.monotonic() - started_at) * 1000,
+        len(tasks),
+    )
 
     return tasks
 
