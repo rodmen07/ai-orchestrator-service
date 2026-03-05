@@ -19,5 +19,14 @@ class PlanResponse(BaseModel):
     tasks: List[str]
 
 
+class AgentRequest(BaseModel):
+    prompt: str = Field(min_length=3, max_length=2000)
+    bearer_token: str = Field(min_length=1)
+
+
+class AgentResponse(BaseModel):
+    result: str
+
+
 class HealthResponse(BaseModel):
     status: str
