@@ -2,7 +2,7 @@ import os
 
 from app.config import get_non_negative_int_env, get_positive_float_env
 from app.normalization import normalize_tasks
-from app.openrouter import should_retry_status
+from app.openrouter_retry import should_retry_status
 
 
 def test_normalize_tasks_removes_leading_numbers_and_bullets() -> None:

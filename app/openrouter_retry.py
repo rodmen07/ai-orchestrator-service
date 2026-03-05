@@ -20,7 +20,7 @@ async def post_chat_completion_with_retry(
     client: httpx.AsyncClient,
     endpoint: str,
     headers: dict[str, str],
-    body: dict,
+    body: dict[str, object],
 ) -> tuple[httpx.Response, int]:
     attempts = OPENROUTER_MAX_RETRIES + 1
     last_network_error: httpx.RequestError | None = None

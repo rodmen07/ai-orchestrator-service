@@ -31,7 +31,7 @@ def build_plan_prompt(
     return "".join(sections)
 
 
-def extract_content_from_payload(payload: dict) -> str:
+def extract_content_from_payload(payload: dict[str, object]) -> str:
     try:
         return payload["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as error:

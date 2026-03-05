@@ -12,7 +12,7 @@ from app.config import (
 )
 from app.normalization import extract_tasks_from_content
 from app.openrouter_prompt import build_plan_prompt, extract_content_from_payload
-from app.openrouter_retry import post_chat_completion_with_retry, should_retry_status
+from app.openrouter_retry import post_chat_completion_with_retry
 
 
 logger = logging.getLogger("ai-orchestrator-service")
@@ -28,7 +28,7 @@ async def generate_plan(
 
     prompt = build_plan_prompt(goal, existing_tasks=existing_tasks, context_tasks=context_tasks)
 
-    body = {
+    body: dict[str, object] = {
         "model": OPENROUTER_MODEL,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.2,
