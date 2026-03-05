@@ -6,8 +6,7 @@ primary_region = "iad"
 
 [env]
   APP_PORT = "8081"
-  OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-  OPENROUTER_MODEL = "google/gemma-3-4b-it:free"
+  ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
   REQUEST_TIMEOUT_SECONDS = "30"
 
 [[services]]

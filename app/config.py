@@ -34,13 +34,8 @@ def get_non_negative_int_env(name: str, default: int) -> int:
 
 
 APP_TITLE = "ai-orchestrator-service"
-OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "google/gemma-3-4b-it:free")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+ANTHROPIC_MAX_RETRIES = get_non_negative_int_env("ANTHROPIC_MAX_RETRIES", 2)
 REQUEST_TIMEOUT_SECONDS = get_positive_float_env("REQUEST_TIMEOUT_SECONDS", 30.0)
-OPENROUTER_MAX_RETRIES = get_non_negative_int_env("OPENROUTER_MAX_RETRIES", 2)
-OPENROUTER_RETRY_BASE_DELAY_SECONDS = get_positive_float_env(
-    "OPENROUTER_RETRY_BASE_DELAY_SECONDS",
-    0.4,
-)
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()

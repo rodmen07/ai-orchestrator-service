@@ -1,18 +1,17 @@
 import logging
 import time
 
-import httpx
+import anthropic
 from fastapi import HTTPException
 
 from app.config import (
-    OPENROUTER_API_KEY,
-    OPENROUTER_BASE_URL,
-    OPENROUTER_MODEL,
+    ANTHROPIC_API_KEY,
+    ANTHROPIC_MAX_RETRIES,
+    ANTHROPIC_MODEL,
     REQUEST_TIMEOUT_SECONDS,
 )
 from app.normalization import extract_tasks_from_content
-from app.openrouter_prompt import build_plan_prompt, extract_content_from_payload
-from app.openrouter_retry import post_chat_completion_with_retry
+from app.openrouter_prompt import build_plan_prompt
 
 
 logger = logging.getLogger("ai-orchestrator-service")
@@ -25,8 +24,8 @@ async def generate_plan(
     feedback: str = "",
     target_count: int = 7,
 ) -> list[str]:
-    if not OPENROUTER_API_KEY:
-        raise HTTPException(status_code=503, detail="OPENROUTER_API_KEY missing")
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY missing")
 
     prompt = build_plan_prompt(
         goal,
@@ -36,44 +35,40 @@ async def generate_plan(
         target_count=target_count,
     )
 
-    body: dict[str, object] = {
-        "model": OPENROUTER_MODEL,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.2,
-    }
-
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-    }
+    client = anthropic.AsyncAnthropic(
+        api_key=ANTHROPIC_API_KEY,
+        max_retries=ANTHROPIC_MAX_RETRIES,
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
 
     started_at = time.monotonic()
-    endpoint = f"{OPENROUTER_BASE_URL}/chat/completions"
 
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
-        response, attempts_used = await post_chat_completion_with_retry(
-            client=client,
-            endpoint=endpoint,
-            headers=headers,
-            body=body,
+    try:
+        message = await client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
         )
+    except anthropic.RateLimitError as error:
+        raise HTTPException(status_code=429, detail="Claude API rate limit reached") from error
+    except anthropic.APIStatusError as error:
+        raise HTTPException(status_code=502, detail=f"Claude API error: {error.status_code}") from error
+    except anthropic.APIConnectionError as error:
+        raise HTTPException(status_code=502, detail="Failed to connect to Claude API") from error
 
-    if response.status_code >= 400:
-        raise HTTPException(status_code=502, detail="Upstream LLM request failed")
-
-    payload = response.json()
-    content = extract_content_from_payload(payload)
-
+    content = message.content[0].text if message.content else ""
     tasks = extract_tasks_from_content(content)
+
     if not tasks:
         raise HTTPException(status_code=502, detail="No tasks returned by LLM")
 
     logger.info(
-        "plan generated model=%s attempts=%s duration_ms=%.2f tasks=%s",
-        OPENROUTER_MODEL,
-        attempts_used,
+        "plan generated model=%s duration_ms=%.2f tasks=%s input_tokens=%s output_tokens=%s",
+        ANTHROPIC_MODEL,
         (time.monotonic() - started_at) * 1000,
         len(tasks),
+        message.usage.input_tokens,
+        message.usage.output_tokens,
     )
 
     return tasks
