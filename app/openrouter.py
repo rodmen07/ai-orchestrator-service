@@ -18,11 +18,15 @@ from app.openrouter_retry import post_chat_completion_with_retry, should_retry_s
 logger = logging.getLogger("ai-orchestrator-service")
 
 
-async def generate_plan(goal: str) -> list[str]:
+async def generate_plan(
+    goal: str,
+    existing_tasks: list[str] | None = None,
+    context_tasks: list[str] | None = None,
+) -> list[str]:
     if not OPENROUTER_API_KEY:
         raise HTTPException(status_code=503, detail="OPENROUTER_API_KEY missing")
 
-    prompt = build_plan_prompt(goal)
+    prompt = build_plan_prompt(goal, existing_tasks=existing_tasks, context_tasks=context_tasks)
 
     body = {
         "model": OPENROUTER_MODEL,

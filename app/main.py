@@ -1,7 +1,8 @@
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from app.config import APP_TITLE, LOG_LEVEL
+from app.guardrails import check_goal
 from app.openrouter import generate_plan
 from app.schemas import HealthResponse, PlanRequest, PlanResponse
 
@@ -18,5 +19,13 @@ async def health() -> HealthResponse:
 
 @app.post("/plan", response_model=PlanResponse)
 async def plan(request: PlanRequest) -> PlanResponse:
-    tasks = await generate_plan(request.goal)
+    error = check_goal(request.goal)
+    if error:
+        raise HTTPException(status_code=422, detail=error)
+
+    tasks = await generate_plan(
+        request.goal,
+        existing_tasks=request.existing_tasks,
+        context_tasks=request.context_tasks,
+    )
     return PlanResponse(tasks=tasks)
