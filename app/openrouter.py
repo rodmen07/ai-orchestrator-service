@@ -22,11 +22,19 @@ async def generate_plan(
     goal: str,
     existing_tasks: list[str] | None = None,
     context_tasks: list[str] | None = None,
+    feedback: str = "",
+    target_count: int = 7,
 ) -> list[str]:
     if not OPENROUTER_API_KEY:
         raise HTTPException(status_code=503, detail="OPENROUTER_API_KEY missing")
 
-    prompt = build_plan_prompt(goal, existing_tasks=existing_tasks, context_tasks=context_tasks)
+    prompt = build_plan_prompt(
+        goal,
+        existing_tasks=existing_tasks,
+        context_tasks=context_tasks,
+        feedback=feedback,
+        target_count=target_count,
+    )
 
     body: dict[str, object] = {
         "model": OPENROUTER_MODEL,

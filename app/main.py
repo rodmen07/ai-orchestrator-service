@@ -27,5 +27,7 @@ async def plan(request: PlanRequest) -> PlanResponse:
         request.goal,
         existing_tasks=request.existing_tasks,
         context_tasks=request.context_tasks,
+        feedback=request.feedback,
+        target_count=request.target_count,
     )
     return PlanResponse(tasks=tasks)
