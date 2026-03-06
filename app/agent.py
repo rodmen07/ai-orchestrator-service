@@ -175,6 +175,7 @@ async def run_agent(prompt: str, bearer_token: str) -> str:
         except anthropic.RateLimitError as e:
             raise HTTPException(status_code=429, detail="Claude API rate limit reached") from e
         except anthropic.APIStatusError as e:
+            logger.error("Claude API error: status=%d body=%s", e.status_code, e.body)
             raise HTTPException(status_code=502, detail=f"Claude API error: {e.status_code}") from e
         except anthropic.APIConnectionError as e:
             raise HTTPException(status_code=502, detail="Failed to connect to Claude API") from e
