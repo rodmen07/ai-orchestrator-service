@@ -52,6 +52,7 @@ async def generate_plan(
     except anthropic.RateLimitError as error:
         raise HTTPException(status_code=429, detail="Claude API rate limit reached") from error
     except anthropic.APIStatusError as error:
+        logger.error("Claude API error: status=%d body=%s", error.status_code, error.body)
         raise HTTPException(status_code=502, detail=f"Claude API error: {error.status_code}") from error
     except anthropic.APIConnectionError as error:
         raise HTTPException(status_code=502, detail="Failed to connect to Claude API") from error

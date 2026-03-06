@@ -6,7 +6,7 @@ primary_region = "iad"
 
 [env]
   APP_PORT = "8081"
-  ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
+  ANTHROPIC_MODEL = "claude-haiku-4-5"
   REQUEST_TIMEOUT_SECONDS = "30"
 
 [[services]]
