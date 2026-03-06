@@ -37,7 +37,6 @@ TOOLS = [
                     "description": "Maximum number of tasks to return. Default 20.",
                 },
             },
-            "required": [],
         },
     },
     {
@@ -82,7 +81,6 @@ TOOLS = [
                     "description": "Maximum number of accounts to return.",
                 },
             },
-            "required": [],
         },
     },
     {
@@ -105,7 +103,6 @@ TOOLS = [
                     "description": "Maximum number of contacts to return.",
                 },
             },
-            "required": [],
         },
     },
 ]
