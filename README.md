@@ -1,114 +1,213 @@
 # AI Orchestrator Service
 
-Python microservice for goal-to-task planning that can be called by the Rust `backend-service`.
+A production-ready Python microservice that translates natural language goals into
+structured task plans using LLMs — designed to be called as an internal service
+from any backend.
 
-## Why this service
+**Live demo:** `https://ai-orchestrator-service-rodmen07.fly.dev/health`
 
-- Isolates AI provider logic from core task CRUD APIs
-- Gives independent scaling and provider fallback in one place
-- Keeps backend-service focused on business/domain rules
+```bash
+curl -X POST https://ai-orchestrator-service-rodmen07.fly.dev/plan \
+  -H "Content-Type: application/json" \
+  -d '{"goal": "Ship an MVP in 6 weeks"}'
+
+# → { "tasks": ["Define scope and success criteria", "Build core API", "..."] }
+```
+
+---
+
+## Architecture
+
+```
+┌─────────────────┐     HTTP      ┌──────────────────────┐     HTTPS    ┌──────────────┐
+│  backend-service │ ──────────── │  ai-orchestrator-service │ ─────────── │  OpenRouter  │
+│    (Rust)        │  /plan       │      (Python/FastAPI)    │  /chat/     │  LLM API     │
+└─────────────────┘              └──────────────────────┘  completions  └──────────────┘
+```
+
+**Why a separate service?**
+
+Isolating LLM logic into its own microservice is a deliberate architectural
+decision, not an accident of project structure:
+
+- **Independent scaling** — LLM calls are slow and expensive; this service can
+  scale independently from your core API
+- **Provider portability** — swap models or providers by changing one env var,
+  with zero changes to downstream services
+- **Failure isolation** — LLM timeouts and upstream errors don't cascade into
+  your core domain logic
+- **Single implementation** — one canonical planner, consumed by any service
+  that needs it
+
+---
+
+## Engineering Highlights
+
+### Resilient LLM Integration
+- Bounded retry with exponential backoff on transient upstream failures (`429`, `5xx`)
+- Configurable timeout, retry count, and base delay via environment variables
+- Explicit `503` on missing API key — fails fast at startup, not mid-request
+
+### Robust Output Parsing
+LLMs don't always return clean JSON. The parser handles:
+- Raw JSON objects
+- JSON wrapped in fenced code blocks
+- Plain line-by-line text as a fallback
+
+Task normalization strips leading bullets, numbering, and whitespace.
+Empty tasks are filtered before response.
+
+### Observability
+Every plan generation logs: attempt count, model used, response duration,
+and task count. `LOG_LEVEL` is configurable for production vs. debug verbosity.
+
+### Validated I/O
+Input and output shapes are enforced with Pydantic:
+- `goal` field: `min_length=3`, `max_length=1000`
+- Response always returns `{ "tasks": List[str] }`
+
+---
 
 ## API
 
-- `GET /health` → `{ "status": "ok" }`
-- `POST /plan`
-  - Request: `{ "goal": "Ship MVP in 6 weeks" }`
-  - Response: `{ "tasks": ["Define scope", "Build API", "..." ] }`
+| Method | Endpoint  | Description                          |
+|--------|-----------|--------------------------------------|
+| GET    | `/health` | Health check → `{ "status": "ok" }` |
+| POST   | `/plan`   | Generate tasks from a goal           |
 
-## Run locally
+**POST /plan**
+
+Request:
+```json
+{ "goal": "Build a customer onboarding flow" }
+```
+
+Response:
+```json
+{
+  "tasks": [
+    "Map the current onboarding steps",
+    "Identify drop-off points in the funnel",
+    "Design the new flow wireframes",
+    "..."
+  ]
+}
+```
+
+Error responses:
+| Status | Cause                                      |
+|--------|--------------------------------------------|
+| 422    | Invalid request (goal too short/long)      |
+| 502    | Upstream LLM failure or unparseable output |
+| 503    | Missing `OPENROUTER_API_KEY`               |
+
+---
+
+## Running Locally
 
 ```bash
-cd /home/rodmendoza07/Projects/ai-orchestrator-service
+git clone https://github.com/rodmen07/ai-orchestrator-service
+cd ai-orchestrator-service
+
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+
 cp .env.example .env
-export $(grep -v '^#' .env | xargs)
+# Add your OPENROUTER_API_KEY to .env
+
 uvicorn app.main:app --reload --port 8081
 ```
 
-## Test
+Test it:
+```bash
+curl -X POST http://localhost:8081/plan \
+  -H "Content-Type: application/json" \
+  -d '{"goal": "Launch a new product feature"}'
+```
 
+Run tests:
 ```bash
 pytest
 ```
 
-## Rust backend integration (recommended)
+---
 
-In `backend-service`, replace direct LLM calls with an internal HTTP call:
-
-- URL: `http://localhost:8081/plan` (local)
-- Body: `{ "goal": "..." }`
-- Response passthrough: `{ "tasks": [...] }`
-
-This keeps one canonical planner implementation while frontend and backend APIs remain stable.
-
-## Environment
-
-- `OPENROUTER_API_KEY`
-- `OPENROUTER_MODEL` (default: `google/gemma-3-4b-it:free`)
-- `OPENROUTER_BASE_URL` (default: `https://openrouter.ai/api/v1`)
-- `REQUEST_TIMEOUT_SECONDS` (default: `30`)
-- `OPENROUTER_MAX_RETRIES` (default: `2`)
-- `OPENROUTER_RETRY_BASE_DELAY_SECONDS` (default: `0.4`)
-- `LOG_LEVEL` (default: `INFO`)
-- `APP_PORT` (default: `8081`)
-
-## Deploy (Fly.io)
-
-This service includes `fly.toml`, `Dockerfile`, and `.dockerignore`.
+## Deploying to Fly.io
 
 ```bash
-cd /home/rodmendoza07/Projects/ai-orchestrator-service
 fly launch --no-deploy
 fly secrets set OPENROUTER_API_KEY=your_key_here
 fly deploy
 ```
 
-After deployment, set backend env:
-
+To wire up a downstream backend service:
 ```bash
-cd /home/rodmendoza07/Projects/backend-service
-fly secrets set AI_ORCHESTRATOR_PLAN_URL=https://ai-orchestrator-service-rodmen07.fly.dev/plan
-fly deploy
+fly secrets set AI_ORCHESTRATOR_PLAN_URL=https://ai-orchestrator-service-<your-app>.fly.dev/plan
 ```
 
-## Working context from current code
+---
 
-### Request/response validation
+## Configuration
 
-- `PlanRequest.goal` is validated with Pydantic (`min_length=3`, `max_length=1000`).
-- `POST /plan` returns `PlanResponse` with `tasks: List[str]`.
-- `GET /health` returns `{"status":"ok"}` via typed response model.
+| Variable                            | Default                          | Description                        |
+|-------------------------------------|----------------------------------|------------------------------------|
+| `OPENROUTER_API_KEY`                | —                                | Required. Your OpenRouter API key. |
+| `OPENROUTER_MODEL`                  | `google/gemma-3-4b-it:free`      | Model to use for planning.         |
+| `OPENROUTER_BASE_URL`               | `https://openrouter.ai/api/v1`   | Override for self-hosted models.   |
+| `REQUEST_TIMEOUT_SECONDS`           | `30`                             | Per-request LLM timeout.           |
+| `OPENROUTER_MAX_RETRIES`            | `2`                              | Max retry attempts on failure.     |
+| `OPENROUTER_RETRY_BASE_DELAY_SECONDS` | `0.4`                          | Base delay for exponential backoff.|
+| `LOG_LEVEL`                         | `INFO`                           | Logging verbosity.                 |
+| `APP_PORT`                          | `8081`                           | Port the service binds to.         |
 
-### LLM integration behavior
+---
 
-- Service calls OpenRouter `POST /chat/completions` using `httpx.AsyncClient`.
-- Prompt requires JSON output shape: `{"tasks":["Task 1", "Task 2"]}`.
-- Default generation config currently uses `temperature: 0.2`.
-- For transient upstream failures (for example `429`/`5xx`), service performs bounded retry/backoff.
+## Integrating with Your Backend
 
-### Output parsing and normalization
+Replace direct LLM calls in your service with a single HTTP call:
 
-- Parser accepts multiple output formats from upstream model:
-  - raw JSON,
-  - JSON wrapped in fenced code blocks,
-  - plain line-by-line fallback.
-- Task normalization removes leading numbering/bullets and trims whitespace.
-- Empty tasks are filtered out before returning response.
+```python
+# Python example
+import httpx
 
-### Failure semantics
+async def get_tasks(goal: str) -> list[str]:
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "http://localhost:8081/plan",
+            json={"goal": goal},
+            timeout=35.0
+        )
+        response.raise_for_status()
+        return response.json()["tasks"]
+```
 
-- Missing `OPENROUTER_API_KEY` returns HTTP `503`.
-- Upstream HTTP failures or malformed payloads return HTTP `502`.
-- If no actionable tasks are extracted, service returns HTTP `502` with clear detail.
+```rust
+// Rust example (reqwest)
+let response = client
+    .post(&plan_url)
+    .json(&serde_json::json!({ "goal": goal }))
+    .send()
+    .await?;
+let plan: PlanResponse = response.json().await?;
+```
 
-### Observability notes
+---
 
-- Service logs planner attempt count, model, duration, and task count per successful plan generation.
-- `LOG_LEVEL` can be raised in production for deeper troubleshooting.
+## Stack
 
-### Contributor notes
+- **Runtime:** Python 3.11+
+- **Framework:** FastAPI + Uvicorn
+- **HTTP client:** httpx (async)
+- **Validation:** Pydantic v2
+- **LLM provider:** OpenRouter (model-agnostic)
+- **Containerization:** Docker
+- **Deployment:** Fly.io
+- **CI/CD:** GitHub Actions
 
-- Current test coverage includes normalization behavior (`tests/test_normalization.py`).
-- If parsing or normalization logic changes, extend tests in that file first.
+---
+
+## Contributing
+
+If parsing or normalization logic changes, extend `tests/test_normalization.py` first.
+PRs welcome.
