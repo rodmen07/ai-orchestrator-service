@@ -1,41 +1,25 @@
 from fastapi import HTTPException
 
 
-def build_plan_prompt(
-    goal: str,
-    existing_tasks: list[str] | None = None,
-    context_tasks: list[str] | None = None,
-    feedback: str = "",
-    target_count: int = 7,
-) -> str:
-    base = (
-        "You are a planning assistant. Return JSON only with shape "
-        '{"tasks":["Task 1","Task 2"]}. '
-        f"Generate exactly {target_count} actionable, specific tasks for this short-term goal. "
-        "Do not suggest tasks that are already in progress or completed."
-    )
+SYSTEM_PROMPT = (
+    "You are a senior cloud architect advisor. When given a cloud-related project idea, "
+    "generate a concrete, ordered roadmap of exactly {target_count} milestones covering "
+    "the end-to-end journey from initial setup to production.\n\n"
+    "Rules:\n"
+    "- Each item is one specific, actionable milestone (not a topic or category)\n"
+    "- Cover the full arc: infrastructure, networking, security, application, CI/CD, observability, and cost\n"
+    "- Reference real cloud services and patterns (e.g. \"Configure VPC with public/private subnets and NAT gateway\")\n"
+    "- Order items logically — dependencies before dependents\n"
+    "- No markdown formatting, no bullet prefixes, no numbering in the text itself\n"
+    '- Return ONLY valid JSON: {"tasks": ["milestone 1", "milestone 2", ...]}'
+)
 
-    sections: list[str] = [base, f"\nGoal: {goal}"]
 
-    if existing_tasks:
-        listed = "\n".join(f"- {t}" for t in existing_tasks)
-        sections.append(
-            f"\nTasks already assigned to this goal (do not repeat or duplicate these):\n{listed}"
-        )
-
-    if context_tasks:
-        listed = "\n".join(f"- {t}" for t in context_tasks[:10])
-        sections.append(
-            f"\nOther tasks currently in the system (use for broader context only):\n{listed}"
-        )
-
-    if feedback and feedback.strip():
-        sections.append(
-            f"\nAdditional instructions from the user (apply these when generating tasks): {feedback.strip()}"
-        )
-
-    sections.append("\nReturn only the JSON object, no explanation.")
-    return "".join(sections)
+def build_plan_prompt(goal: str, target_count: int = 16) -> tuple[str, str]:
+    """Returns (system_prompt, user_message) for the cloud roadmap request."""
+    system = SYSTEM_PROMPT.replace("{target_count}", str(target_count))
+    user = f"Cloud project idea: {goal}"
+    return system, user
 
 
 def extract_content_from_payload(payload: dict[str, object]) -> str:

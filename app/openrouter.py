@@ -22,18 +22,12 @@ async def generate_plan(
     existing_tasks: list[str] | None = None,
     context_tasks: list[str] | None = None,
     feedback: str = "",
-    target_count: int = 7,
+    target_count: int = 16,
 ) -> list[str]:
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY missing")
 
-    prompt = build_plan_prompt(
-        goal,
-        existing_tasks=existing_tasks,
-        context_tasks=context_tasks,
-        feedback=feedback,
-        target_count=target_count,
-    )
+    system_prompt, user_message = build_plan_prompt(goal, target_count=target_count)
 
     client = anthropic.AsyncAnthropic(
         api_key=ANTHROPIC_API_KEY,
@@ -46,8 +40,9 @@ async def generate_plan(
     try:
         message = await client.messages.create(
             model=ANTHROPIC_MODEL,
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
+            max_tokens=2048,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_message}],
         )
     except anthropic.RateLimitError as error:
         raise HTTPException(status_code=429, detail="Claude API rate limit reached") from error

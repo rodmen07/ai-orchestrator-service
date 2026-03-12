@@ -11,8 +11,8 @@ class PlanRequest(BaseModel):
     context_tasks: List[str] = Field(default_factory=list)
     # Optional refinement instructions from the user (e.g. "focus on testing", "make them smaller").
     feedback: str = Field(default="", max_length=500)
-    # How many tasks to generate. Defaults to 7.
-    target_count: int = Field(default=7, ge=1, le=15)
+    # How many milestones to generate. Defaults to 16.
+    target_count: int = Field(default=16, ge=12, le=20)
 
 
 class PlanResponse(BaseModel):
