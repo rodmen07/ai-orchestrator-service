@@ -1,8 +1,9 @@
 import logging
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.agent import run_agent
-from app.config import APP_TITLE, LOG_LEVEL
+from app.config import ALLOWED_ORIGINS, APP_TITLE, LOG_LEVEL
 from app.guardrails import check_goal
 from app.openrouter import generate_consult, generate_plan
 from app.schemas import AgentRequest, AgentResponse, ConsultRequest, ConsultResponse, HealthResponse, PlanRequest, PlanResponse
@@ -11,6 +12,13 @@ logging.basicConfig(level=LOG_LEVEL)
 logger = logging.getLogger(APP_TITLE)
 
 app = FastAPI(title=APP_TITLE)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["POST", "GET"],
+    allow_headers=["Content-Type"],
+)
 
 
 @app.get("/health", response_model=HealthResponse)

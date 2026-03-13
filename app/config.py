@@ -34,6 +34,9 @@ def get_non_negative_int_env(name: str, default: int) -> int:
 
 
 APP_TITLE = "ai-orchestrator-service"
+ALLOWED_ORIGINS: list[str] = [
+    o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()
+]
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
 ANTHROPIC_MAX_RETRIES = get_non_negative_int_env("ANTHROPIC_MAX_RETRIES", 2)
