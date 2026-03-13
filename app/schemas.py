@@ -30,3 +30,11 @@ class AgentResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+
+
+class ConsultRequest(BaseModel):
+    description: str = Field(min_length=10, max_length=1000)
+
+
+class ConsultResponse(BaseModel):
+    response: str

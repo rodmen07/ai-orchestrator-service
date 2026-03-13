@@ -68,3 +68,50 @@ async def generate_plan(
     )
 
     return tasks
+
+from app.consult_prompt import build_consult_prompt
+
+
+async def generate_consult(description: str) -> str:
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY missing")
+
+    system_prompt, user_message = build_consult_prompt(description)
+
+    client = anthropic.AsyncAnthropic(
+        api_key=ANTHROPIC_API_KEY,
+        max_retries=ANTHROPIC_MAX_RETRIES,
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+
+    started_at = time.monotonic()
+
+    try:
+        message = await client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=1024,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_message}],
+        )
+    except anthropic.RateLimitError as error:
+        raise HTTPException(status_code=429, detail="Claude API rate limit reached") from error
+    except anthropic.APIStatusError as error:
+        logger.error("Claude API error: status=%d body=%s", error.status_code, error.body)
+        raise HTTPException(status_code=502, detail=f"Claude API error: {error.status_code}") from error
+    except anthropic.APIConnectionError as error:
+        raise HTTPException(status_code=502, detail="Failed to connect to Claude API") from error
+
+    content = message.content[0].text if message.content else ""
+
+    if not content.strip():
+        raise HTTPException(status_code=502, detail="Empty response from LLM")
+
+    logger.info(
+        "consult generated model=%s duration_ms=%.2f input_tokens=%s output_tokens=%s",
+        ANTHROPIC_MODEL,
+        (time.monotonic() - started_at) * 1000,
+        message.usage.input_tokens,
+        message.usage.output_tokens,
+    )
+
+    return content

@@ -4,8 +4,8 @@ from fastapi import FastAPI, HTTPException
 from app.agent import run_agent
 from app.config import APP_TITLE, LOG_LEVEL
 from app.guardrails import check_goal
-from app.openrouter import generate_plan
-from app.schemas import AgentRequest, AgentResponse, HealthResponse, PlanRequest, PlanResponse
+from app.openrouter import generate_consult, generate_plan
+from app.schemas import AgentRequest, AgentResponse, ConsultRequest, ConsultResponse, HealthResponse, PlanRequest, PlanResponse
 
 logging.basicConfig(level=LOG_LEVEL)
 logger = logging.getLogger(APP_TITLE)
@@ -22,6 +22,12 @@ async def health() -> HealthResponse:
 async def agent(request: AgentRequest) -> AgentResponse:
     result = await run_agent(request.prompt, request.bearer_token)
     return AgentResponse(result=result)
+
+
+@app.post("/consult", response_model=ConsultResponse)
+async def consult(request: ConsultRequest) -> ConsultResponse:
+    response = await generate_consult(request.description)
+    return ConsultResponse(response=response)
 
 
 @app.post("/plan", response_model=PlanResponse)
