@@ -1,13 +1,18 @@
+import asyncio
 import logging
 import time
+import uuid
 
 import anthropic
+import httpx
 from fastapi import HTTPException
 
 from app.config import (
     ANTHROPIC_API_KEY,
     ANTHROPIC_MAX_RETRIES,
     ANTHROPIC_MODEL,
+    DASHBOARD_ADMIN_KEY,
+    DASHBOARD_URL,
     REQUEST_TIMEOUT_SECONDS,
 )
 from app.normalization import extract_tasks_from_content
@@ -72,6 +77,30 @@ async def generate_plan(
 from app.consult_prompt import build_consult_prompt
 
 
+async def _log_consult(prompt: str, response: str, model: str, input_tokens: int, output_tokens: int, duration_ms: float) -> None:
+    if not DASHBOARD_URL or not DASHBOARD_ADMIN_KEY:
+        return
+    payload = {
+        "id": str(uuid.uuid4()),
+        "prompt": prompt,
+        "response": response,
+        "model": model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "duration_ms": round(duration_ms, 2),
+        "logged_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(
+                f"{DASHBOARD_URL}/ingest",
+                json={"source": "ai-consult", "event_type": "consult", "payload": payload},
+                headers={"X-Admin-Key": DASHBOARD_ADMIN_KEY},
+            )
+    except Exception as exc:
+        logger.warning("Failed to log consult to dashboard: %s", exc)
+
+
 async def generate_consult(description: str) -> str:
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY missing")
@@ -106,12 +135,22 @@ async def generate_consult(description: str) -> str:
     if not content.strip():
         raise HTTPException(status_code=502, detail="Empty response from LLM")
 
+    duration_ms = (time.monotonic() - started_at) * 1000
     logger.info(
         "consult generated model=%s duration_ms=%.2f input_tokens=%s output_tokens=%s",
         ANTHROPIC_MODEL,
-        (time.monotonic() - started_at) * 1000,
+        duration_ms,
         message.usage.input_tokens,
         message.usage.output_tokens,
     )
+
+    asyncio.create_task(_log_consult(
+        prompt=description,
+        response=content,
+        model=ANTHROPIC_MODEL,
+        input_tokens=message.usage.input_tokens,
+        output_tokens=message.usage.output_tokens,
+        duration_ms=duration_ms,
+    ))
 
     return content
