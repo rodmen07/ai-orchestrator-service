@@ -15,6 +15,7 @@ from app.config import (
     DASHBOARD_URL,
     REQUEST_TIMEOUT_SECONDS,
 )
+from app.consult_prompt import CONSULT_SYSTEM_PROMPT
 from app.normalization import extract_tasks_from_content
 from app.openrouter_prompt import build_plan_prompt
 
@@ -74,8 +75,6 @@ async def generate_plan(
 
     return tasks
 
-from app.consult_prompt import build_consult_prompt
-
 
 async def _log_consult(prompt: str, response: str, model: str, input_tokens: int, output_tokens: int, duration_ms: float) -> None:
     if not DASHBOARD_URL or not DASHBOARD_ADMIN_KEY:
@@ -101,11 +100,13 @@ async def _log_consult(prompt: str, response: str, model: str, input_tokens: int
         logger.warning("Failed to log consult to dashboard: %s", exc)
 
 
-async def generate_consult(description: str) -> str:
+async def generate_consult(messages: list[dict]) -> str:
+    """
+    Multi-turn consulting response. `messages` is a list of
+    {"role": "user"|"assistant", "content": str} dicts in conversation order.
+    """
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY missing")
-
-    system_prompt, user_message = build_consult_prompt(description)
 
     client = anthropic.AsyncAnthropic(
         api_key=ANTHROPIC_API_KEY,
@@ -119,8 +120,8 @@ async def generate_consult(description: str) -> str:
         message = await client.messages.create(
             model=ANTHROPIC_MODEL,
             max_tokens=1024,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
+            system=CONSULT_SYSTEM_PROMPT,
+            messages=messages,
         )
     except anthropic.RateLimitError as error:
         raise HTTPException(status_code=429, detail="Claude API rate limit reached") from error
@@ -137,15 +138,20 @@ async def generate_consult(description: str) -> str:
 
     duration_ms = (time.monotonic() - started_at) * 1000
     logger.info(
-        "consult generated model=%s duration_ms=%.2f input_tokens=%s output_tokens=%s",
+        "consult generated model=%s duration_ms=%.2f input_tokens=%s output_tokens=%s turns=%d",
         ANTHROPIC_MODEL,
         duration_ms,
         message.usage.input_tokens,
         message.usage.output_tokens,
+        len([m for m in messages if m["role"] == "user"]),
     )
 
+    # Log the last user prompt for the dashboard
+    last_user_prompt = next(
+        (m["content"] for m in reversed(messages) if m["role"] == "user"), ""
+    )
     asyncio.create_task(_log_consult(
-        prompt=description,
+        prompt=last_user_prompt,
         response=content,
         model=ANTHROPIC_MODEL,
         input_tokens=message.usage.input_tokens,

@@ -32,8 +32,23 @@ class HealthResponse(BaseModel):
     status: str
 
 
+class ConversationMessage(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1, max_length=2000)
+
+
 class ConsultRequest(BaseModel):
-    description: str = Field(min_length=10, max_length=1000)
+    # Multi-turn: pass the full conversation so far.
+    messages: List[ConversationMessage] = Field(default_factory=list, max_length=8)
+    # Single-turn legacy field — ignored if messages is provided.
+    description: str = Field(default="", max_length=1000)
+
+    def resolved_messages(self) -> List[ConversationMessage]:
+        if self.messages:
+            return self.messages
+        if self.description:
+            return [ConversationMessage(role="user", content=self.description)]
+        raise ValueError("Either messages or description must be provided")
 
 
 class ConsultResponse(BaseModel):

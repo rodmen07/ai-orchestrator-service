@@ -6,7 +6,7 @@ from app.agent import run_agent
 from app.config import ALLOWED_ORIGINS, APP_TITLE, LOG_LEVEL
 from app.guardrails import check_goal
 from app.openrouter import generate_consult, generate_plan
-from app.schemas import AgentRequest, AgentResponse, ConsultRequest, ConsultResponse, HealthResponse, PlanRequest, PlanResponse
+from app.schemas import AgentRequest, AgentResponse, ConsultRequest, ConsultResponse, ConversationMessage, HealthResponse, PlanRequest, PlanResponse
 
 logging.basicConfig(level=LOG_LEVEL)
 logger = logging.getLogger(APP_TITLE)
@@ -34,7 +34,11 @@ async def agent(request: AgentRequest) -> AgentResponse:
 
 @app.post("/consult", response_model=ConsultResponse)
 async def consult(request: ConsultRequest) -> ConsultResponse:
-    response = await generate_consult(request.description)
+    try:
+        msgs = request.resolved_messages()
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    response = await generate_consult([{"role": m.role, "content": m.content} for m in msgs])
     return ConsultResponse(response=response)
 
 
