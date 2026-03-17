@@ -53,3 +53,13 @@ class ConsultRequest(BaseModel):
 
 class ConsultResponse(BaseModel):
     response: str
+
+
+class LeadRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    email: str = Field(min_length=3, max_length=200)
+
+
+class LeadResponse(BaseModel):
+    saved: bool
+    message: str

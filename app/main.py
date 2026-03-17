@@ -6,8 +6,9 @@ from fastapi.responses import StreamingResponse
 from app.agent import run_agent
 from app.config import ALLOWED_ORIGINS, APP_TITLE, LOG_LEVEL
 from app.guardrails import check_goal
+from app.lead import save_lead
 from app.openrouter import generate_consult, generate_consult_stream, generate_plan
-from app.schemas import AgentRequest, AgentResponse, ConsultRequest, ConsultResponse, ConversationMessage, HealthResponse, PlanRequest, PlanResponse
+from app.schemas import AgentRequest, AgentResponse, ConsultRequest, ConsultResponse, ConversationMessage, HealthResponse, LeadRequest, LeadResponse, PlanRequest, PlanResponse
 
 logging.basicConfig(level=LOG_LEVEL)
 logger = logging.getLogger(APP_TITLE)
@@ -41,6 +42,15 @@ async def consult(request: ConsultRequest) -> ConsultResponse:
         raise HTTPException(status_code=422, detail=str(e))
     response = await generate_consult([{"role": m.role, "content": m.content} for m in msgs])
     return ConsultResponse(response=response)
+
+
+@app.post("/lead", response_model=LeadResponse)
+async def lead(request: LeadRequest) -> LeadResponse:
+    saved = await save_lead(request.name, request.email)
+    return LeadResponse(
+        saved=saved,
+        message="Thanks — I'll be in touch soon." if saved else "Something went wrong — please use the contact form.",
+    )
 
 
 @app.post("/consult/stream")

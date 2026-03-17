@@ -44,3 +44,5 @@ REQUEST_TIMEOUT_SECONDS = get_positive_float_env("REQUEST_TIMEOUT_SECONDS", 30.0
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "").rstrip("/")
 DASHBOARD_ADMIN_KEY = os.getenv("DASHBOARD_ADMIN_KEY", "")
+CONTACTS_SERVICE_URL = os.getenv("CONTACTS_SERVICE_URL", "").rstrip("/")
+AUTH_JWT_SECRET = os.getenv("AUTH_JWT_SECRET", "")
