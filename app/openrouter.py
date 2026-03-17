@@ -1,7 +1,9 @@
 import asyncio
+import json
 import logging
 import time
 import uuid
+from collections.abc import AsyncGenerator
 
 import anthropic
 import httpx
@@ -160,3 +162,71 @@ async def generate_consult(messages: list[dict]) -> str:
     ))
 
     return content
+
+
+async def generate_consult_stream(messages: list[dict]) -> AsyncGenerator[str, None]:
+    """
+    Streaming version of generate_consult. Yields SSE-formatted chunks:
+      data: {"token": "..."}\n\n   — one per streamed text delta
+      data: [DONE]\n\n             — signals completion
+      data: {"error": "..."}\n\n   — on failure
+    """
+    if not ANTHROPIC_API_KEY:
+        yield f"data: {json.dumps({'error': 'ANTHROPIC_API_KEY missing'})}\n\n"
+        return
+
+    client = anthropic.AsyncAnthropic(
+        api_key=ANTHROPIC_API_KEY,
+        max_retries=0,  # no retries on streaming — surface errors immediately
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+
+    started_at = time.monotonic()
+    chunks: list[str] = []
+    last_user_prompt = next(
+        (m["content"] for m in reversed(messages) if m["role"] == "user"), ""
+    )
+
+    try:
+        async with client.messages.stream(
+            model=ANTHROPIC_MODEL,
+            max_tokens=1024,
+            system=CONSULT_SYSTEM_PROMPT,
+            messages=messages,
+        ) as stream:
+            async for text in stream.text_stream:
+                chunks.append(text)
+                yield f"data: {json.dumps({'token': text})}\n\n"
+
+            final = await stream.get_final_message()
+
+    except anthropic.RateLimitError:
+        yield f"data: {json.dumps({'error': 'Rate limit reached — try again shortly'})}\n\n"
+        return
+    except (anthropic.APIStatusError, anthropic.APIConnectionError) as exc:
+        logger.error("Streaming API error: %s", exc)
+        yield f"data: {json.dumps({'error': 'AI service error — try again'})}\n\n"
+        return
+
+    duration_ms = (time.monotonic() - started_at) * 1000
+    full_response = "".join(chunks)
+
+    logger.info(
+        "consult streamed model=%s duration_ms=%.2f input_tokens=%s output_tokens=%s turns=%d",
+        ANTHROPIC_MODEL,
+        duration_ms,
+        final.usage.input_tokens,
+        final.usage.output_tokens,
+        len([m for m in messages if m["role"] == "user"]),
+    )
+
+    asyncio.create_task(_log_consult(
+        prompt=last_user_prompt,
+        response=full_response,
+        model=ANTHROPIC_MODEL,
+        input_tokens=final.usage.input_tokens,
+        output_tokens=final.usage.output_tokens,
+        duration_ms=duration_ms,
+    ))
+
+    yield "data: [DONE]\n\n"
