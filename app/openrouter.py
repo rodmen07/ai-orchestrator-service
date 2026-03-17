@@ -17,6 +17,7 @@ from app.config import (
     DASHBOARD_URL,
     REQUEST_TIMEOUT_SECONDS,
 )
+from app.classify import classify_prompt
 from app.consult_prompt import CONSULT_SYSTEM_PROMPT
 from app.normalization import extract_tasks_from_content
 from app.openrouter_prompt import build_plan_prompt
@@ -86,6 +87,7 @@ async def _log_consult(prompt: str, response: str, model: str, input_tokens: int
         "prompt": prompt,
         "response": response,
         "model": model,
+        "topic": classify_prompt(prompt),
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
         "duration_ms": round(duration_ms, 2),
