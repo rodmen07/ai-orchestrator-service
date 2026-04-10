@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 
 from app.agent import run_agent
 from app.config import ALLOWED_ORIGINS, APP_TITLE, LOG_LEVEL
+from app.gemini_client import generate_consult_gemini, generate_consult_stream_gemini
 from app.guardrails import check_goal
 from app.lead import save_lead
 from app.openrouter import generate_consult, generate_consult_stream, generate_plan
@@ -61,6 +62,32 @@ async def consult_stream(request: ConsultRequest) -> StreamingResponse:
         raise HTTPException(status_code=422, detail=str(e))
     return StreamingResponse(
         generate_consult_stream([{"role": m.role, "content": m.content} for m in msgs]),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.post("/consult/gemini", response_model=ConsultResponse)
+async def consult_gemini(request: ConsultRequest) -> ConsultResponse:
+    try:
+        msgs = request.resolved_messages()
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    response = await generate_consult_gemini([{"role": m.role, "content": m.content} for m in msgs])
+    return ConsultResponse(response=response)
+
+
+@app.post("/consult/gemini/stream")
+async def consult_gemini_stream(request: ConsultRequest) -> StreamingResponse:
+    try:
+        msgs = request.resolved_messages()
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return StreamingResponse(
+        generate_consult_stream_gemini([{"role": m.role, "content": m.content} for m in msgs]),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
