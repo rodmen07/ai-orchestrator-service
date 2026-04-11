@@ -11,11 +11,14 @@ from app.consult_prompt import CONSULT_SYSTEM_PROMPT
 
 logger = logging.getLogger("ai-orchestrator-service")
 
+# Use the stable v1 API endpoint instead of the default v1beta
+_CLIENT_OPTIONS = {"api_endpoint": "generativelanguage.googleapis.com"}
+
 
 def _configured_model() -> genai.GenerativeModel:
     if not GOOGLE_API_KEY:
         raise HTTPException(status_code=503, detail="GOOGLE_API_KEY not configured")
-    genai.configure(api_key=GOOGLE_API_KEY)
+    genai.configure(api_key=GOOGLE_API_KEY, client_options=_CLIENT_OPTIONS)
     return genai.GenerativeModel(
         model_name=GEMINI_MODEL,
         system_instruction=CONSULT_SYSTEM_PROMPT,
@@ -38,7 +41,6 @@ def _to_gemini_history(messages: list[dict]) -> tuple[list[dict], str]:
 async def generate_consult_gemini(messages: list[dict]) -> str:
     model = _configured_model()
     history, prompt = _to_gemini_history(messages)
-
     started_at = time.monotonic()
 
     try:
@@ -73,13 +75,12 @@ async def generate_consult_stream_gemini(messages: list[dict]) -> AsyncGenerator
         yield f"data: {json.dumps({'error': 'GOOGLE_API_KEY not configured'})}\n\n"
         return
 
-    genai.configure(api_key=GOOGLE_API_KEY)
+    genai.configure(api_key=GOOGLE_API_KEY, client_options=_CLIENT_OPTIONS)
     model = genai.GenerativeModel(
         model_name=GEMINI_MODEL,
         system_instruction=CONSULT_SYSTEM_PROMPT,
     )
     history, prompt = _to_gemini_history(messages)
-
     started_at = time.monotonic()
 
     try:
