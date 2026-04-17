@@ -9,7 +9,7 @@ from app.gemini_client import generate_consult_gemini, generate_consult_stream_g
 from app.guardrails import check_goal
 from app.lead import save_lead
 from app.openrouter import generate_consult, generate_consult_stream, generate_plan
-from app.schemas import AgentRequest, AgentResponse, ConsultRequest, ConsultResponse, ConversationMessage, HealthResponse, LeadRequest, LeadResponse, PlanRequest, PlanResponse
+from app.schemas import AgentRequest, AgentResponse, ConsultRequest, ConsultResponse, HealthResponse, LeadRequest, LeadResponse, PlanRequest, PlanResponse
 
 logging.basicConfig(level=LOG_LEVEL)
 logger = logging.getLogger(APP_TITLE)
