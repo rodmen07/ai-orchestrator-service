@@ -3,6 +3,25 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
+# OpenTelemetry imports and initialization
+try:
+    from opentelemetry.exporter.gcp_trace import CloudTraceExporter
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+    
+    # Initialize Cloud Trace exporter
+    trace_exporter = CloudTraceExporter()
+    tracer_provider = TracerProvider()
+    tracer_provider.add_span_processor(SimpleSpanProcessor(trace_exporter))
+    
+    # Set global tracer provider
+    from opentelemetry import trace
+    trace.set_tracer_provider(tracer_provider)
+except Exception as e:
+    logging.warning(f"Failed to initialize OpenTelemetry: {e}. Continuing without distributed tracing.")
+
 from app.agent import run_agent
 from app.config import ALLOWED_ORIGINS, APP_TITLE, LOG_LEVEL
 from app.gemini_client import generate_consult_gemini, generate_consult_stream_gemini
@@ -15,6 +34,13 @@ logging.basicConfig(level=LOG_LEVEL)
 logger = logging.getLogger(APP_TITLE)
 
 app = FastAPI(title=APP_TITLE)
+
+# Instrument FastAPI and httpx for automatic tracing
+try:
+    FastAPIInstrumentor.instrument_app(app)
+    HTTPXClientInstrumentor().instrument()
+except Exception as e:
+    logging.warning(f"Failed to instrument app: {e}")
 
 app.add_middleware(
     CORSMiddleware,
