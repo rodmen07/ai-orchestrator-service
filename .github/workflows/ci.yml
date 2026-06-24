@@ -23,5 +23,24 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run tests
-        run: pytest tests/ -v
+      - name: Type check with mypy
+        run: mypy app/ --ignore-missing-imports
+
+      - name: Run tests with coverage
+        run: pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=xml
+
+      - name: Audit dependencies for known vulnerabilities
+        # Informational: surfaces PyPI advisories in CI without breaking
+        # unrelated PRs when upstream publishes a new advisory. Triage findings
+        # and bump pinned versions in requirements.txt as fixes become available.
+        continue-on-error: true
+        run: |
+          pip install pip-audit
+          pip-audit --requirement requirements.txt --desc
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: ai-orchestrator-service
