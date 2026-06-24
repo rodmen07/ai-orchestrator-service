@@ -23,5 +23,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Type check
+        run: mypy app/ --ignore-missing-imports
+
       - name: Run tests
-        run: pytest tests/ -v
+        run: pytest tests/ -v --cov=app --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: ai-orchestrator-service
+          fail_ci_if_error: false
